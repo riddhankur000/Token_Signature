@@ -10,6 +10,7 @@ import torch
 import tqdm
 from datasets import load_dataset
 from torch.utils.data import DataLoader
+import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer, DataCollatorForSeq2Seq, HfArgumentParser
 from solve import DecodingArguments, solve
 from task1 import AnswerTask,ChoiceTask
@@ -24,12 +25,12 @@ setproctitle.setproctitle('')
 @dataclass
 class MainArguments:
     data_file: str = field(default="./benchmark/gsm8k/test.jsonl")
-    model_name_or_path: str = field(default="model/mistralai/Mistral-7B-Instruct-v0.3")
+    model_name_or_path: str = field(default="mistralai/Mistral-7B-Instruct-v0.1")
     batch_size: int = field(default=64)
     output_fname: str = field(default="outputs/model_predictions.jsonl")
     result_path: str = field(default="result.txt")
     gpu_id:str = field(default="3")
-    model:str= field(default="Mistral-7B-Instruct-v0.3")
+    model:str= field(default="Mistral-7B-Instruct-v0.1")
 
 
 def encode_function(example, tokenizer, task):
@@ -60,20 +61,29 @@ def main():
         task = ChoiceTask(encode_format=decoding_args.encode_format,decoding=decoding_args.decoding,model=main_args.model)
     # Initialize Accelerator with device_placement=True (this helps in multi-GPU configurations)
     accelerator = Accelerator(device_placement=True, split_batches=False)
-
+    print(torch.cuda.is_available() )
     gpu_id=main_args.gpu_id
-    device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:0" if torch.cuda.is_available() else "cpu")
     torch.cuda.set_device(device)
 
+    model_name=main_args.model_name_or_path
+    if main_args.model_name_or_path=="microsoft/Phi-3.5-Mini-Instruct":
+        model_name="microsoft/Phi-3.5-mini-Instruct"
+
+    model_name="mistralai/Mistral-7B-Instruct-v0.1"
     # Load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(main_args.model_name_or_path, padding_side='left')
+    tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side='left')
     tokenizer.pad_token_id = tokenizer.eos_token_id
     model = AutoModelForCausalLM.from_pretrained(
-        main_args.model_name_or_path, torch_dtype=torch.bfloat16
+        model_name, torch_dtype=torch.bfloat16,device_map="auto"
     )
     
+    # if torch.cuda.is_available():
+    #     model = nn.DataParallel(model, device_ids=[0, 1]) # Specify your desired GPU indices
+    
+    
     # Manually move model to 'cuda:3'
-    model = model.to(device)
+    # model = model.to(device)
 
     # Ensure that accelerator prepares the model for the right device (this helps in multi-GPU setups)
     model = accelerator.prepare(model)  # Automatically places the model on the correct device

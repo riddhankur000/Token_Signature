@@ -16,35 +16,50 @@ class AnswerTask:
 
         assert self.encode_format in ['instruct', 'normal']
         assert self.decoding in ['standard','direct_answer','cot']  # Validate decoding format
-        assert self.model in ["Llama-3.2-3B-Instruct","Phi-3.5-mini-instruct","Mistral-7B-Instruct-v0.3","Llama-3.1-8B-Instruct","Phi-3-mini-4k-instruct"]
+        assert self.model in ["Phi-3.5-Mini-Instruct", "Llama-3.1-8B-Instruct","Mistral-7B-Instruct-v0.1" ]
 
     def encode_prompt(self, example):
+        # 1. Construct the base prompt text
         if self.decoding == 'standard':
-            prompt='{}\n\n'.format(example['question'])
-        elif self.decoding == 'direct_answer':   # You should respond with \"The final answer is $\\boxed{answer}$\" where $\\boxed{answer}$ is the final numerical answer to the problem.\nYou may only give the answer. Begin your response with \"The final answer is $\\boxed{\".\nYou may only give the answer. Begin your response with \"The final answer is $\\boxed{\".  
-            "The final answer is: $\\boxed{"
+            prompt = '{}\n\n'.format(example['question'])
+        elif self.decoding == 'direct_answer':
+            # "The final answer is: $\boxed{"
             if 'MATH' in self.data_file:
-                prompt=example['question']+'\n\nYour answer must not include any reasoning step. You must only write your answer directly.\n'
+                prompt = example['question'] + '\n\nYour answer must not include any reasoning step. You must only write your answer directly.\n'
             else:
-                prompt=example['question']+'\n\nYour answer must not include any reasoning step. You must only write your numerical answer directly. You only output \"The answer is <answer>\" where <answer> is the numerical answer to the problem.\n'
-        elif self.decoding == 'cot':    
-            prompt=example['question']+"\n\n Let's think step by step.\n"
-
-
+                prompt = example['question'] + '\n\nYour answer must not include any reasoning step. You must only write your numerical answer directly. You only output "The answer is <answer>" where <answer> is the numerical answer to the problem.\n'
+        elif self.decoding == 'cot':
+            prompt = example['question'] + "\n\n Let's think step by step.\n"
+        
+        # 2. Apply Chat Templates (Fixed for Case Sensitivity and Missing Versions)
+        
+        # --- Logic for MATH + Direct Answer ---
         if 'MATH' in self.data_file and self.decoding == 'direct_answer':
-            if self.model=="Phi-3.5-mini-instruct":   
-                return '<|user|>'+prompt+'<|end|><|assistant|>The final answer is: $\\boxed{'
-            elif self.model=="Llama-3.2-3B-Instruct" or  self.model=="Llama-3.1-8B-Instruct": 
-                return '<|begin_of_text|><|start_header_id|>user<|end_header_id|>'+prompt+'<|eot_id|><|start_header_id|>assistant<|end_header_id|>The final answer is: $\\boxed{'
-            elif self.model=="Mistral-7B-Instruct-v0.3":
-                return '[INST]'+prompt+'[/INST]The final answer is: $\\boxed{'
+            # Matches "Phi-3.5-Mini-Instruct" (Capital M)
+            if "Phi-3.5" in self.model:   
+                return '<|user|>' + prompt + '<|end|><|assistant|>The final answer is: $\\boxed{'
+            
+            # Matches "Meta-Llama-3..."
+            elif "Llama-3" in self.model: 
+                return '<|begin_of_text|><|start_header_id|>user<|end_header_id|>' + prompt + '<|eot_id|><|start_header_id|>assistant<|end_header_id|>The final answer is: $\\boxed{'
+            
+            # Matches Mistral v0.1 OR v0.3
+            elif "Mistral" in self.model:
+                return '[INST]' + prompt + '[/INST]The final answer is: $\\boxed{'
+        
+        # --- Logic for Everything Else ---
         else:
-            if self.model=="Phi-3.5-mini-instruct":   
-                return '<|user|>'+prompt+'<|end|><|assistant|>'
-            elif self.model=="Llama-3.2-3B-Instruct" or  self.model=="Llama-3.1-8B-Instruct": 
-                return '<|begin_of_text|><|start_header_id|>user<|end_header_id|>'+prompt+'<|eot_id|><|start_header_id|>assistant<|end_header_id|>'
-            elif self.model=="Mistral-7B-Instruct-v0.3":
-                return '[INST]'+prompt+'[/INST]'
+            if "Phi-3.5" in self.model:   
+                return '<|user|>' + prompt + '<|end|><|assistant|>'
+            
+            elif "Llama-3" in self.model: 
+                return '<|begin_of_text|><|start_header_id|>user<|end_header_id|>' + prompt + '<|eot_id|><|start_header_id|>assistant<|end_header_id|>'
+            
+            elif "Mistral" in self.model:
+                return '[INST]' + prompt + '[/INST]'
+
+        # 3. Safety Net: If no model matched, print error instead of crashing silently
+        raise ValueError(f"Model name mismatch! The script received '{self.model}' but encode_prompt didn't have a matching if-statement.")
         
     def extract_gt_answer(self, completion):                    #extract standard correct answer
         # match = self.GT_ANS_RE.search(completion)
@@ -106,22 +121,33 @@ class ChoiceTask:
         
         assert self.encode_format in ['instruct', 'normal']
         assert self.decoding in ['standard','direct_answer','cot']  # Validate decoding format
-        assert self.model in ["Llama-3.2-3B-Instruct","Phi-3.5-mini-instruct","Mistral-7B-Instruct-v0.3","Llama-3.1-8B-Instruct","Phi-3-mini-4k-instruct"]
+        assert self.model in ["Phi-3.5-Mini-Instruct", "Llama-3.1-8B-Instruct","Mistral-7B-Instruct-v0.1" ]
 
     def encode_prompt(self, example):
+        # 1. Construct the base prompt
         if self.decoding == 'standard':
-            prompt='{}\n\n'.format(example['question'])
+            prompt = '{}\n\n'.format(example['question'])
         elif self.decoding == 'direct_answer':      
-            prompt='{}\n\nYour answer must not include any reasoning. You must write your answer directly. Write the answer in the following format: \"Answer: <Your Answer Letter Choice>\"\n'.format(example['question'])
+            prompt = '{}\n\nYour answer must not include any reasoning. You must write your answer directly. Write the answer in the following format: "Answer: <Your Answer Letter Choice>"\n'.format(example['question'])
         elif self.decoding == 'cot':   
-            prompt="{}\n\nLet's think step by step.\n".format(example['question'])
+            prompt = "{}\n\nLet's think step by step.\n".format(example['question'])
     
-        if self.model=="Phi-3.5-mini-instruct":   
+        # 2. Apply Template (Robust Matching)
+        # Matches "Phi-3.5-Mini-Instruct" AND "Phi-3.5-mini-instruct"
+        if "Phi-3.5" in self.model:   
             return '<|user|>'+prompt+'<|end|><|assistant|>'
-        elif self.model=="Llama-3.2-3B-Instruct" or  self.model=="Llama-3.1-8B-Instruct": 
+        
+        # Matches "Meta-Llama-3..." and "Llama-3..."
+        elif "Llama-3" in self.model: 
             return '<|begin_of_text|><|start_header_id|>user<|end_header_id|>'+prompt+'<|eot_id|><|start_header_id|>assistant<|end_header_id|>'
-        elif self.model=="Mistral-7B-Instruct-v0.3":
+        
+        # Matches "Mistral-7B-Instruct-v0.1" AND "Mistral-7B-Instruct-v0.3"
+        elif "Mistral" in self.model:
             return '[INST]'+prompt+'[/INST]'
+            
+        # 3. Safety Net
+        else:
+            raise ValueError(f"Model name mismatch! The script received '{self.model}' but encode_prompt didn't have a matching if-statement.")
 
     def extract_gt_answer(self, completion):                    #extract standard correct answer
         return completion
